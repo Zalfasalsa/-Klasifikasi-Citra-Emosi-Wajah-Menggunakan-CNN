@@ -27,10 +27,12 @@ import tensorflow as tf
 
 from PIL import Image, ImageOps
 
+CV2_ERROR = None
 try:
     import cv2
-except Exception:
+except Exception as _e:
     cv2 = None
+    CV2_ERROR = f"{type(_e).__name__}: {_e}"
 
 # True hanya jika OpenCV benar-benar lengkap (punya CascadeClassifier)
 CV2_OK = cv2 is not None and hasattr(cv2, "CascadeClassifier")
@@ -396,6 +398,16 @@ model_choice = (
 )
 
 st.sidebar.markdown("---")
+if CV2_OK:
+    st.sidebar.caption(f"✅ OpenCV aktif (v{cv2.__version__})")
+elif cv2 is None:
+    st.sidebar.warning(f"OpenCV gagal di-import:\n\n{CV2_ERROR}")
+else:
+    st.sidebar.warning(
+        "OpenCV terpasang tetapi tidak lengkap "
+        f"(v{getattr(cv2, '__version__', '?')}, "
+        "tidak ada CascadeClassifier)."
+    )
 st.sidebar.caption(
     "Dashboard ini membaca artefak dari notebook "
     "(model, riwayat training, metrik, confusion matrix, dll.)."
