@@ -29,8 +29,11 @@ from PIL import Image, ImageOps
 
 try:
     import cv2
-except ImportError:
+except Exception:
     cv2 = None
+
+# True hanya jika OpenCV benar-benar lengkap (punya CascadeClassifier)
+CV2_OK = cv2 is not None and hasattr(cv2, "CascadeClassifier")
 
 
 # ----------------------------------------------------------------------------
@@ -180,18 +183,47 @@ def fmt_pct(x):
 # PRA-PEMROSESAN DAN PREDIKSI
 # ----------------------------------------------------------------------------
 
+def _find_cascade():
+    """Cari file haarcascade di beberapa lokasi yang mungkin."""
+    name = "haarcascade_frontalface_default.xml"
+    paths = []
+    try:
+        paths.append(Path(cv2.data.haarcascades) / name)
+    except AttributeError:
+        pass
+    try:
+        paths.append(Path(cv2.__file__).parent / "data" / name)
+    except Exception:
+        pass
+    paths.append(APP_DIR / name)
+    for p in paths:
+        if p.is_file():
+            return str(p)
+    return None
+
+
 def crop_face(img: Image.Image):
-    """Memotong wajah terbesar dengan Haar Cascade."""
-    if cv2 is None:
+    """Memotong wajah terbesar dengan Haar Cascade.
+    Aman: jika OpenCV bermasalah, gambar utuh dipakai tanpa error."""
+    if not CV2_OK:
         return img, False
 
-    gray = np.array(img.convert("L"))
-    cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
-    faces = cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40)
-    )
+    try:
+        path = _find_cascade()
+        if path is None:
+            return img, False
+
+        cascade = cv2.CascadeClassifier(path)
+        if cascade.empty():
+            return img, False
+
+        gray = np.array(img.convert("L"))
+        faces = cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40)
+        )
+    except Exception:
+        return img, False
+
     if len(faces) == 0:
         return img, False
 
@@ -709,14 +741,15 @@ with tab_pred:
 
         use_face = opt1.checkbox(
             "Deteksi & potong wajah otomatis",
-            value=cv2 is not None,
-            disabled=cv2 is None,
+            value=CV2_OK,
+            disabled=not CV2_OK,
             help=(
                 "Model dilatih pada gambar wajah yang sudah dipotong. "
                 "Foto utuh sebaiknya dipotong ke area wajah. "
-                "Butuh opencv-python."
-                if cv2 is not None
-                else "Pasang dulu: pip install opencv-python-headless"
+                "Butuh opencv-python-headless."
+                if CV2_OK
+                else "OpenCV tidak tersedia/rusak di server. Tambahkan "
+                     "opencv-python-headless ke requirements.txt."
             )
         )
 
